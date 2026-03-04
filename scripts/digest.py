@@ -46,10 +46,27 @@ def graphql(query):
     )
     try:
         with urllib.request.urlopen(req) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            result = json.loads(resp.read().decode("utf-8"))
+            if "errors" in result:
+                print(f"GraphQL errors: {json.dumps(result['errors'], indent=2)}",
+                      file=sys.stderr)
+                # Check if it's a permission issue
+                for err in result.get("errors", []):
+                    msg = err.get("message", "")
+                    if "resource not accessible" in msg.lower() or "forbidden" in msg.lower():
+                        print(
+                            "\n=== PAT PERMISSION ISSUE ===\n"
+                            "Fine-grained PAT needs:\n"
+                            "  Account permissions -> Projects: Read-only\n"
+                            "  Repository permissions -> Issues: Read and write\n"
+                            "Make sure the PAT owner is the project owner.\n"
+                            "============================\n",
+                            file=sys.stderr,
+                        )
+            return result
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8")
-        print(f"GraphQL error {e.code}: {body}", file=sys.stderr)
+        print(f"GraphQL HTTP error {e.code}: {body}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -124,7 +141,24 @@ def fetch_all_items():
           }}
         }}
         ''')
-        items_data = data["data"]["node"]["items"]
+        node = data.get("data", {}).get("node")
+        if node is None:
+            print(
+                "ERROR: Could not access project. Full response:\n"
+                f"{json.dumps(data, indent=2, ensure_ascii=False)}",
+                file=sys.stderr,
+            )
+            print(
+                "\n=== TROUBLESHOOTING ===\n"
+                "1. Verify GH_PAT secret is set in repo settings\n"
+                "2. PAT needs Account permissions -> Projects: Read-only\n"
+                "3. PAT owner must be the project owner (foru1215)\n"
+                "4. If using Fine-grained PAT, ensure it's not expired\n"
+                "========================",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        items_data = node["items"]
         all_items.extend(items_data["nodes"])
         if not items_data["pageInfo"]["hasNextPage"]:
             break
