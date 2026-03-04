@@ -1,0 +1,34 @@
+name: Daily Digest
+
+on:
+  schedule:
+    # JST 6:00 = UTC 21:00 (previous day)
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (true/false)'
+        required: false
+        default: 'false'
+
+permissions:
+  issues: write
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run digest
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          DIGEST_REPO: ${{ github.repository }}
+        run: python scripts/digest.py
